@@ -66,18 +66,18 @@ const user = new User({ name, email, passwordHash: hashedPassword, role, phoneNu
       });
       await nurse.save();
     } else if (role === "Patient") {
-      const { doctorId, symptoms } = req.body;
+      const { dateOfBirth, gender } = req.body;
       const patient = new Patient({
         user: user._id,
-        doctor: doctorId,
-        symptoms,
+        dateOfBirth,
+        gender
       });
       await patient.save();
     }
 
     let token= jwt.sign(
       {email, userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
+      process.env.SECRET_KEY,
       { expiresIn: "1h" }
     );
 
@@ -121,7 +121,7 @@ const user = new User({ name, email, passwordHash: hashedPassword, role, phoneNu
     }
     let token = jwt.sign(
       { email, userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
+      process.env.SECRET_KEY,
       { expiresIn: "1h" }
     );
 

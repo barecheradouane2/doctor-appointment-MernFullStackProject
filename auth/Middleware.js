@@ -1,45 +1,35 @@
+const jwt = require("jsonwebtoken");
 
-
-const jwt = require('jsonwebtoken');
-
-
-const auth= (requiredRole=null) => {
-
-    return async (req, res, next) => {
+const auth = (requiredRoles = null) => {
+  return (req, res, next) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) {
-        return res.status(401).json({ message: "Access denied. No token provided." });
+      return res.status(401).json({ message: "Access denied. No token provided." });
     }
+
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET,(err, decoded) => {
-            if (err) {
-              
-                return res.status(400).json({ message: "Invalid token." });
-            }else {
-                 console.log("Token decoded successfully:", decoded);
-                req.user = decoded;
+      const decoded = jwt.verify(token, process.env.SECRET_KEY);
+      req.user = decoded;
 
-            if (requiredRole && decoded.role !== requiredRole) {
-                return res.status(403).json({ message: "Access denied. Insufficient permissions." });
-            }
-               
-                   next();
+      if (requiredRoles) {
+        if (Array.isArray(requiredRoles)) {
+          // Allow multiple roles
+          if (!requiredRoles.includes(decoded.role)) {
+            return res.status(403).json({ message: "Access denied. Insufficient permissions." });
+          }
+        } else {
+          // Single role case
+          if (decoded.role !== requiredRoles) {
+            return res.status(403).json({ message: "Access denied. Insufficient permissions." });
+          }
+        }
+      }
 
-            }
-
-        });
-       
-
-       
-     
-    } catch (error) {       
-        console.error("Token verification failed:", error);
-        res.status(400).json({ message: "Invalid token." });
+      next();
+    } catch (error) {
+      return res.status(400).json({ message: "Invalid token." });
     }
+  };
 };
 
-}
-
-
-
-export default auth;
+module.exports = auth;

@@ -7,8 +7,27 @@ class BaseController {
   // GET / - Get all
   getAll = async (req, res) => {
     try {
-      const data = await this.model.find();
-      res.json(data);
+      let { page = 1, limit = 10 } = req.query;
+
+      page = Number(page);
+      limit = Number(limit);
+
+      const skip = (page - 1) * limit;
+
+      const total = await this.model.countDocuments();
+
+      const data = await this.model
+        .find()
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 }); // optional sorting
+
+      res.json({
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+        data,
+      });
     } catch (err) {
       res.status(500).json({ message: err.message });
     }

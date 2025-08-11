@@ -4,9 +4,15 @@ const cors = require('cors');
 const connectDB = require('./config/db');
 
 
+
+
+
+
 dotenv.config();
 
 const app = express();
+
+
 
 app.use(express.json());
 app.use(cors());
@@ -21,6 +27,11 @@ const userRoutes = require('./routes/userRoutes');
 app.use('/user', userRoutes);
 
 app.use("/files", express.static("uploads"));
+
+const availableSlotRoutes = require('./routes/availableSlotRoutes');
+
+app.use('/available-slots',  availableSlotRoutes);
+
 
 
 // Start server

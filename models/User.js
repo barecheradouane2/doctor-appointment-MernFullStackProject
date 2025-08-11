@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
     required: true 
   },
   phoneNumber: { type: String, maxlength: 20 },
-  createdAt: { type: Date, default: Date.now },
+  
 });
 
 module.exports = mongoose.model('User', userSchema);
