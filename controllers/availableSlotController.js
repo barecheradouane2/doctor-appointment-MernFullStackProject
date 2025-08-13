@@ -1,25 +1,39 @@
 const BaseController = require("./baseController");
 const AvailableSlot = require("../models/AvailableSlot");
 const Nurse = require("../models/Nurse");
+const Doctor = require("../models/Doctor");
+const User = require("../models/User");
+const mongoose = require("mongoose");
+
+const getDoctorIdFromUser = require("../utils/getDoctorIdFromUser");
+
+
 
 class AvailableSlotController extends BaseController {
   constructor() {
     super(AvailableSlot);
   }
 
-  // Example: add custom logic for AvailableSlot
+ 
   create = async (req, res) => {
     try {
-      const { doctor, date, startTime, endTime, isBooked = false } = req.body;
+      const {  date, startTime, endTime, isBooked = false } = req.body;
 
       // iwant the nurse and doctor can create only his slot ???
 
-      if (!doctor || !date || !startTime || !endTime) {
+      if ( !date || !startTime || !endTime) {
         return res.status(400).json({ message: "All fields are required." });
       }
 
+      
+
+
+         const doctorId = await getDoctorIdFromUser(req.user);
+
+
+
       const availableSlot = new AvailableSlot({
-        doctor,
+        doctor: doctorId,
         date,
         startTime,
         endTime,
@@ -40,46 +54,42 @@ class AvailableSlotController extends BaseController {
       });
     }
   };
-  getAll = async (req, res) => {
+ 
+   getAll = async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, doctorname } = req.query;
+
     if (!date) {
       return res.status(400).json({ message: "Date query parameter is required" });
     }
-
-    let doctorId;
-
-    if (req.user.role === "Nurse") {
-      const nurseProfile = await Nurse.findOne({ user: req.user.id });
-      if (!nurseProfile) {
-        return res.status(404).json({ message: "Nurse profile not found" });
-      }
-      doctorId = nurseProfile.doctor;
-    } 
-    else if (req.user.role === "Doctor") {
-      const doctorProfile = await Doctor.findOne({ user: req.user.id });
-      if (!doctorProfile) {
-        return res.status(404).json({ message: "Doctor profile not found" });
-      }
-      doctorId = doctorProfile._id;
-    } 
-    else {
-      return res.status(403).json({ message: "Only nurses and doctors can view these slots" });
+    if (!doctorname) {
+      return res.status(400).json({ message: "Doctor name query parameter is required" });
+    }
+    if (isNaN(Date.parse(date))) {
+      return res.status(400).json({ message: "Invalid date format" });
     }
 
-    // Normalize the query date to midnight
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
+    const user = await User.findOne({ name: doctorname });
+    if (!user) {
+      return res.status(404).json({ message: "User (doctor) not found" });
+    }
+
+    const doctor = await Doctor.findOne({ user: user._id });
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    const start = new Date(date);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
 
     const slots = await AvailableSlot.find({
-      date: targetDate, // Exact match
-      doctor: doctorId
-    }).populate({
-      path: "doctor",
-      populate: { path: "user", model: "User" }
+      date: { $gte: start, $lt: end },
+      doctor: doctor._id
     });
 
-    res.status(200).json(slots);
+    res.status(200).json({ slots });
   } catch (error) {
     console.error("Error fetching available slots:", error);
     res.status(500).json({
@@ -87,8 +97,63 @@ class AvailableSlotController extends BaseController {
       error: error.message
     });
   }
-};
+   };
 
+   update =async (req, res) => {
+    try {
+      const { slotId } = req.params;
+      const { date, startTime, endTime, isBooked } = req.body;
+
+      const doctorId = await getDoctorIdFromUser(req.user);
+
+      const availableSlot = await AvailableSlot.findOne({ _id: slotId, doctor: doctorId });
+      if (!availableSlot) {
+        return res.status(404).json({ message: "Available slot not found or you don't have permission to edit it" });
+      }
+
+      availableSlot.date = date || availableSlot.date;
+      availableSlot.startTime = startTime || availableSlot.startTime;
+      availableSlot.endTime = endTime || availableSlot.endTime;
+      availableSlot.isBooked = isBooked !== undefined ? isBooked : availableSlot.isBooked;
+
+      await availableSlot.save();
+
+      res.status(200).json({
+        message: "Available slot updated successfully",
+        availableSlot
+      });
+    } catch (error) {
+      console.error("Error updating available slot:", error);
+      res.status(500).json({
+        message: "Error updating available slot",
+        error: error.message
+      });
+    }
+  };
+
+  delete = async (req, res) => {
+    try {
+      const { slotId } = req.params;
+
+      const doctorId = await getDoctorIdFromUser(req.user);
+
+      const availableSlot = await AvailableSlot.findOneAndDelete({ _id: slotId, doctor: doctorId });
+      if (!availableSlot) {
+        return res.status(404).json({ message: "Available slot not found or you don't have permission to delete it" });
+      }
+
+      res.status(200).json({
+        message: "Available slot deleted successfully",
+        availableSlot
+      });
+    } catch (error) {
+      console.error("Error deleting available slot:", error);
+      res.status(500).json({
+        message: "Error deleting available slot",
+        error: error.message
+      });
+    }
+  };
 }
 
 module.exports = new AvailableSlotController();

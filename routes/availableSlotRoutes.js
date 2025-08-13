@@ -10,7 +10,7 @@ const auth = require('../auth/Middleware');
 // Create slot
 router.post('/create', auth(["Nurse", "Doctor"]), availableSlotController.create);
 router.delete('/delete/:id', auth(["Nurse", "Doctor"]), availableSlotController.delete);
-router.get('/getAll',auth(["Nurse", "Doctor"]), availableSlotController.getAll);
+router.get('/getAll', availableSlotController.getAll);
 router.get('/getOne/:id', auth(["Nurse", "Doctor"]), availableSlotController.getOne);
 router.put('/update/:id', auth(["Nurse", "Doctor"]), availableSlotController.update);
 

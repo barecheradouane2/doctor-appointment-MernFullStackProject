@@ -59,10 +59,10 @@ const user = new User({ name, email, passwordHash: hashedPassword, role, phoneNu
       });
       await doctor.save();
     } else if (role === "Nurse") {
-      const { doctorId } = req.body;
+      const { doctor } = req.body;
       const nurse = new Nurse({
         user: user._id,
-        doctor: doctorId,
+        doctor
       });
       await nurse.save();
     } else if (role === "Patient") {
