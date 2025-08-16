@@ -6,8 +6,6 @@ const availableSlotController = require('../controllers/availableSlotController'
 const auth = require('../auth/Middleware');
 
 
-
-// Create slot
 router.post('/create', auth(["Nurse", "Doctor"]), availableSlotController.create);
 router.delete('/delete/:id', auth(["Nurse", "Doctor"]), availableSlotController.delete);
 router.get('/getAll', availableSlotController.getAll);

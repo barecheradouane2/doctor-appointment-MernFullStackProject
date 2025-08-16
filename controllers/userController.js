@@ -69,6 +69,9 @@ const user = new User({ name, email, passwordHash: hashedPassword, role, phoneNu
       const { dateOfBirth, gender } = req.body;
       const patient = new Patient({
         user: user._id,
+        name: name,
+        phoneNumber,
+
         dateOfBirth,
         gender
       });

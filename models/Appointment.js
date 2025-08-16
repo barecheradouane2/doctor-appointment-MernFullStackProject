@@ -25,9 +25,14 @@ const appointmentSchema = new mongoose.Schema({
   medicalRecord: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'MedicalRecord',
+     required: false,
   },
   payment: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Payment',
+     required: false,
   },
 }, { timestamps: true });
+
+module.exports = mongoose.model('Appointment', appointmentSchema);
+

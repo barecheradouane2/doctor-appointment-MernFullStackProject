@@ -31,8 +31,8 @@ app.use("/files", express.static("uploads"));
 const availableSlotRoutes = require('./routes/availableSlotRoutes');
 
 app.use('/available-slots',  availableSlotRoutes);
-
-
+const appointmentRoutes = require('./routes/appointmentRoutes');
+app.use('/appointments', appointmentRoutes);
 
 // Start server
 app.listen(PORT, () => {
