@@ -2,7 +2,6 @@ const BaseController = require("./baseController");
 const Appointment = require("../models/Appointment");
 const AvailableSlot = require("../models/AvailableSlot");
 const Patient = require("../models/Patient");
-const AvailableSlot = require("../models/AvailableSlot");
 
 const getDoctorIdFromUser = require("../utils/getDoctorIdFromUser");
 
@@ -97,7 +96,7 @@ class AppointmentController extends BaseController {
 
   getAll = async (req, res) => {
     try {
-      let { page = 1, limit = 10 } = req.query;
+      let { page = 1, limit = 10, date, status, patientname } = req.query;
 
       page = Number(page);
       limit = Number(limit);
@@ -107,83 +106,84 @@ class AppointmentController extends BaseController {
       const userId = req.user.userId;
       const userRole = req.user.role;
 
+      let query = {}; // will build dynamically
+      let populateOptions = [];
       let appointments;
-      let total;
 
       if (userRole === "Patient") {
+        // Find current patient
         const currentPatient = await Patient.findOne({ user: userId });
+        if (!currentPatient) {
+          return res.status(404).json({ error: "Patient not found." });
+        }
 
-        let { date, status } = req.query;
-        appointments = await Appointment.find({ patient: currentPatient._id })
-          .skip(skip)
-          .limit(limit)
-          .sort({ createdAt: -1 });
+        query.patient = currentPatient._id;
 
-          if (date) {
-            appointments = await Appointment.find({
-              patient: currentPatient._id,
-              date,
-            })
-              .skip(skip)
-              .limit(limit)
-              .sort({ createdAt: -1 });
-          }
+        // add filters
+        if (status) query.status = status;
 
-          if (status) {
-            appointments = await Appointment.find({
-              patient: currentPatient._id,
-              status,
-            })
-              .skip(skip)
-              .limit(limit)
-              .sort({ createdAt: -1 });
-          }
-
-
-        total = await Appointment.countDocuments({
-          patient: currentPatient._id,
-        });
+        // populate doctor + slot
+        populateOptions = [
+          { path: "doctor", select: "name specialty" },
+          {
+            path: "slot",
+            select: "date startTime endTime",
+            match: date ? { date: new Date(date) } : {},
+          },
+        ];
       } else if (userRole === "Doctor" || userRole === "Nurse") {
-        const doctorId = getDoctorIdFromUser(req.user);
+        // Find doctor ID from user
+        const doctorId = await getDoctorIdFromUser(req.user);
+        if (!doctorId) {
+          return res.status(404).json({ error: "Doctor not found." });
+        }
 
-        let { patientname, date ,status } = req.query;
+        query.doctor = doctorId;
 
-        appointments = await Appointment.find({ doctor: doctorId })
-          .skip(skip)
-          .limit(limit)
-          .sort({ createdAt: -1 });
+        // filter by status
+        if (status) query.status = status;
 
+        // filter by patient name
         if (patientname) {
           const currentPatient = await Patient.findOne({ name: patientname });
-          if (currentPatient) {
-            appointments = await Appointment.find({
-              doctor: doctorId,
-              patient: currentPatient._id,
-            })
-              .skip(skip)
-              .limit(limit)
-              .sort({ createdAt: -1 });
+          if (!currentPatient) {
+            return res.status(200).json({
+              message: "Appointments retrieved successfully.",
+              total: 0,
+              page,
+              totalPages: 0,
+              appointments: [],
+            });
           }
+          query.patient = currentPatient._id;
         }
 
-        if (date) {
-          appointments = await Appointment.find({ doctor: doctorId, date })
-            .skip(skip)
-            .limit(limit)
-            .sort({ createdAt: -1 });
-        }
-
-        if (status) {
-          appointments = await Appointment.find({ doctor: doctorId, status })
-            .skip(skip)
-            .limit(limit)
-            .sort({ createdAt: -1 });
-        }
-
-        total = await Appointment.countDocuments({ doctor: doctorId });
+        // populate patient + slot
+        populateOptions = [
+          { path: "patient", select: "name phoneNumber dateOfBirth" },
+          {
+            path: "slot",
+            select: "date startTime endTime",
+            match: date ? { date: new Date(date) } : {},
+          },
+        ];
       } else {
         return res.status(403).json({ error: "Access denied." });
       }
+
+      // Execute query
+      appointments = await Appointment.find(query)
+        .populate(populateOptions)
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .exec();
+
+      if (date) {
+        appointments = appointments.filter((app) => app.slot !== null);
+      }
+
+      const total = await Appointment.countDocuments(query);
 
       res.status(200).json({
         message: "Appointments retrieved successfully.",
@@ -243,8 +243,6 @@ class AppointmentController extends BaseController {
 
       const { date, slot } = req.body;
 
-
-
       let appointment;
 
       if (userRole === "Patient") {
@@ -254,7 +252,7 @@ class AppointmentController extends BaseController {
           patient: currentPatient._id,
         });
       } else if (userRole === "Doctor" || userRole === "Nurse") {
-        const doctorId = getDoctorIdFromUser(req.user);
+        const doctorId = await getDoctorIdFromUser(req.user);
         const { status } = req.body;
         appointment = await Appointment.findOne({
           _id: id,
@@ -264,26 +262,16 @@ class AppointmentController extends BaseController {
 
         // i think i need to check if date > slot ??
 
-        if(status ==="Cancelled"){
-
+        if (status === "Cancelled") {
           const availableSlot = await AvailableSlot.findOne({
             doctor: doctorId,
             date: appointment.date,
             slot: appointment.slot,
           });
 
-         availableSlot.isBooked = false;
-         await availableSlot.save();
-
+          availableSlot.isBooked = false;
+          await availableSlot.save();
         }
-
-
-
-
-
-
-
-
       } else {
         return res.status(403).json({ error: "Access denied." });
       }
@@ -292,23 +280,18 @@ class AppointmentController extends BaseController {
         return res.status(404).json({ error: "Appointment not found." });
       }
 
-       appointment.date = date || appointment.date;
+      appointment.date = date || appointment.date;
       appointment.slot = slot || appointment.slot;
 
-      // i need to check if the slot is available before updating
+     
       const isSlotAvailable = await AvailableSlot.findOne({
-        doctor: appointment.doctor,
-        date: appointment.date,
-        slot: appointment.slot,
+        _id: appointment.slot,
+        doctor: appointment.doctor
       });
 
       if (!isSlotAvailable) {
         return res.status(400).json({ error: "Slot is not available." });
       }
-
-     
-
-     
 
       await appointment.save();
 
@@ -319,54 +302,51 @@ class AppointmentController extends BaseController {
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
-    
+  };
 
- }
+  delete = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
 
- delete = async (req, res) => {
-   try {
-     const { id } = req.params;
-     const userId = req.user.userId;
-     const userRole = req.user.role;
+      let appointment;
 
-     let appointment;
+      if (userRole === "Patient") {
+        const currentPatient = await Patient.findOne({ user: userId });
+        appointment = await Appointment.findOne({
+          _id: id,
+          patient: currentPatient._id,
+        });
+      } else if (userRole === "Doctor" || userRole === "Nurse") {
+        const doctorId = await getDoctorIdFromUser(req.user);
+        appointment = await Appointment.findOne({
+          _id: id,
+          doctor: doctorId,
+        });
+      } else {
+        return res.status(403).json({ error: "Access denied." });
+      }
 
-     if (userRole === "Patient") {
-       const currentPatient = await Patient.findOne({ user: userId });
-       appointment = await Appointment.findOne({
-         _id: id,
-         patient: currentPatient._id,
-       });
-     } else if (userRole === "Doctor" || userRole === "Nurse") {
-       const doctorId = getDoctorIdFromUser(req.user);
-       appointment = await Appointment.findOne({
-         _id: id,
-         doctor: doctorId,
-       });
-     } else {
-       return res.status(403).json({ error: "Access denied." });
-     }
+      if (!appointment) {
+        return res.status(404).json({ error: "Appointment not found." });
+      }
 
-     if (!appointment) {
-       return res.status(404).json({ error: "Appointment not found." });
-     }
+      await appointment.deleteOne();
 
-     await appointment.remove();
+      res.status(200).json({
+        message: "Appointment deleted successfully.",
+        appointment,
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  };
 
-     res.status(200).json({
-       message: "Appointment deleted successfully.",
-        appointment
-     });
-   } catch (error) {
-     res.status(400).json({ error: error.message });
-   }
- };
-
- // i have 3 option for handle appointemnet 
+  // i have 3 option for handle appointemnet
   // no availbel slot the patient can conform or not
   // availbel slot 8-5  genirc for all doctor
-  // each day the patient should create his  doctor own availble slots  
-
+  // each day the patient should create his  doctor own availble slots
 }
 
 module.exports = new AppointmentController();

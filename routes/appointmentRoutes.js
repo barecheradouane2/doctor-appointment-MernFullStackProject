@@ -14,6 +14,6 @@ router.get('/getOne/:id',auth(["Patient","Nurse", "Doctor"]), appointmentControl
 // i should not allow patient to change his appontement of status
 router.put('/confirm/:id', auth(["Doctor", "Nurse"]), appointmentController.confirmAppointment);
 router.put('/update/:id',auth(["Patient","Nurse", "Doctor"]), appointmentController.update);
-router.delete('/delete/:id', appointmentController.delete);
+router.delete('/delete/:id',auth(["Patient","Nurse", "Doctor"]), appointmentController.delete);
 
 module.exports = router;
