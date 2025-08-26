@@ -45,5 +45,47 @@ class NurseController extends BaseController {
     }
   };
 
- 
+  create = async (req, res) => {
+    try {
+      const doctorId = await getDoctorIdFromUser(req.user);
+      const { name, email, phoneNumber } = req.body;
+
+      const user = await User.create({
+        name,
+        email,
+        phoneNumber,
+        role: "Nurse",
+      });
+
+      const nurse = await Nurse.create({
+        user: user._id,
+        doctor: doctorId,
+      });
+
+      res.status(201).json(nurse);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
+
+  getOne = async (req, res) => {
+    try {
+      const nurseId = req.params.id;
+      const doctorId = await getDoctorIdFromUser(req.user);
+
+      const nurse = await Nurse.findOne({ _id: nurseId, doctor: doctorId }).populate(
+        "user",
+        "name email phoneNumber"
+      );
+
+      if (!nurse) {
+        return res.status(404).json({ message: "Nurse not found" });
+      }
+
+      res.status(200).json(nurse);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
+  
 }

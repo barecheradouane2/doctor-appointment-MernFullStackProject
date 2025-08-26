@@ -349,7 +349,7 @@ class AppointmentController extends BaseController {
       const { appointmentId } = req.params;
       const { visitDescription, diagnosis, additionalNotes, prescriptions } =
         req.body;
-      const doctorId = req.user.userId; // assuming logged-in doctor
+      const doctorId = await getDoctorIdFromUser(req.user);
 
       // Get appointment
       const appointment = await Appointment.findById(appointmentId).populate(
@@ -401,7 +401,7 @@ class AppointmentController extends BaseController {
   getMedicalRecordByAppointment = async (req, res) => {
     try {
       const { appointmentId } = req.params;
-      const doctorId = req.user.userId;
+      const doctorId = await getDoctorIdFromUser(req.user);
 
       const appointment = await Appointment.findOne({
         _id: appointmentId,
@@ -439,7 +439,7 @@ class AppointmentController extends BaseController {
   deleteMedicalRecordByAppointment = async (req, res) => {
     try {
       const { appointmentId } = req.params;
-      const doctorId = req.user.userId;
+      const doctorId = await getDoctorIdFromUser(req.user);
 
       // Find appointment and ensure doctor owns it
       const appointment = await Appointment.findOne({
@@ -487,7 +487,7 @@ class AppointmentController extends BaseController {
       const { appointmentId } = req.params;
       const { visitDescription, diagnosis, additionalNotes, prescriptions } =
         req.body;
-      const doctorId = req.user.userId; // assuming logged-in doctor
+      const doctorId = await getDoctorIdFromUser(req.user);
 
       // Find appointment with populated record
       const appointment = await Appointment.findById(appointmentId).populate(
