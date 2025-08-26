@@ -2,6 +2,8 @@ const BaseController = require("./baseController");
 const Appointment = require("../models/Appointment");
 const AvailableSlot = require("../models/AvailableSlot");
 const Patient = require("../models/Patient");
+const MedicalRecord = require("../models/MedicalRecord");
+const Prescription = require("../models/Prescription");
 
 const getDoctorIdFromUser = require("../utils/getDoctorIdFromUser");
 
@@ -283,10 +285,9 @@ class AppointmentController extends BaseController {
       appointment.date = date || appointment.date;
       appointment.slot = slot || appointment.slot;
 
-     
       const isSlotAvailable = await AvailableSlot.findOne({
         _id: appointment.slot,
-        doctor: appointment.doctor
+        doctor: appointment.doctor,
       });
 
       if (!isSlotAvailable) {
@@ -340,6 +341,205 @@ class AppointmentController extends BaseController {
       });
     } catch (error) {
       res.status(400).json({ error: error.message });
+    }
+  };
+
+  addMedicalRecord = async (req, res) => {
+    try {
+      const { appointmentId } = req.params;
+      const { visitDescription, diagnosis, additionalNotes, prescriptions } =
+        req.body;
+      const doctorId = req.user.userId; // assuming logged-in doctor
+
+      // Get appointment
+      const appointment = await Appointment.findById(appointmentId).populate(
+        "patient"
+      );
+      if (!appointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+
+      const medicalRecord = new MedicalRecord({
+        visitDescription,
+        diagnosis,
+        additionalNotes,
+      });
+      await medicalRecord.save();
+
+      // Attach medical record to appointment
+      appointment.medicalRecord = medicalRecord._id;
+      await appointment.save();
+
+      // If prescriptions are provided, create them
+      let savedPrescriptions = [];
+      if (prescriptions && prescriptions.length > 0) {
+        const createdPrescriptions = prescriptions.map((p) => ({
+          medicalRecord: medicalRecord._id,
+          medicationName: p.medicationName,
+          dosage: p.dosage,
+          frequency: p.frequency,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          specialInstructions: p.specialInstructions,
+        }));
+
+        savedPrescriptions = await Prescription.insertMany(
+          createdPrescriptions
+        );
+      }
+
+      res.status(201).json({
+        message: "Medical record and prescriptions added successfully",
+        medicalRecord,
+        prescriptions: savedPrescriptions,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+  getMedicalRecordByAppointment = async (req, res) => {
+    try {
+      const { appointmentId } = req.params;
+      const doctorId = req.user.userId;
+
+      const appointment = await Appointment.findOne({
+        _id: appointmentId,
+        doctor: doctorId,
+      });
+      if (!appointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+      if (!appointment.medicalRecord) {
+        return res
+          .status(404)
+          .json({ message: "No medical record for this appointment" });
+      }
+
+      const medicalRecord = await MedicalRecord.findOne({
+        _id: appointment.medicalRecord,
+      });
+      if (!medicalRecord) {
+        return res.status(404).json({ message: "Medical record not found" });
+      }
+
+      const prescriptions = await Prescription.find({
+        medicalRecord: medicalRecord._id,
+      });
+
+      res.status(200).json({
+        medicalRecord,
+        prescriptions,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+  deleteMedicalRecordByAppointment = async (req, res) => {
+    try {
+      const { appointmentId } = req.params;
+      const doctorId = req.user.userId;
+
+      // Find appointment and ensure doctor owns it
+      const appointment = await Appointment.findOne({
+        _id: appointmentId,
+        doctor: doctorId,
+      });
+      if (!appointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+
+      if (!appointment.medicalRecord) {
+        return res
+          .status(404)
+          .json({ message: "No medical record linked to this appointment" });
+      }
+
+      // Get medical record
+      const medicalRecord = await MedicalRecord.findById(
+        appointment.medicalRecord
+      );
+      if (!medicalRecord) {
+        return res.status(404).json({ message: "Medical record not found" });
+      }
+
+      // Delete prescriptions linked to this record
+      await Prescription.deleteMany({ medicalRecord: medicalRecord._id });
+
+      // Remove medicalRecord reference from appointment
+      appointment.medicalRecord = undefined;
+      await appointment.save();
+
+      // Delete the medical record itself
+      await medicalRecord.deleteOne();
+
+      res.status(200).json({
+        message: "Medical record and prescriptions deleted successfully",
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  };
+
+  updateMedicalRecord = async (req, res) => {
+    try {
+      const { appointmentId } = req.params;
+      const { visitDescription, diagnosis, additionalNotes, prescriptions } =
+        req.body;
+      const doctorId = req.user.userId; // assuming logged-in doctor
+
+      // Find appointment with populated record
+      const appointment = await Appointment.findById(appointmentId).populate(
+        "medicalRecord"
+      );
+      if (!appointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+
+      // Ensure appointment already has a medical record
+      if (!appointment.medicalRecord) {
+        return res
+          .status(404)
+          .json({ message: "No medical record found for this appointment" });
+      }
+
+      // Update medical record fields
+      const medicalRecord = await MedicalRecord.findByIdAndUpdate(
+        appointment.medicalRecord._id,
+        { visitDescription, diagnosis, additionalNotes },
+        { new: true } // return updated document
+      );
+
+      // Handle prescriptions update
+      let updatedPrescriptions = [];
+      if (prescriptions && prescriptions.length > 0) {
+        // Delete old prescriptions linked to this medical record
+        await Prescription.deleteMany({ medicalRecord: medicalRecord._id });
+
+        // Insert new prescriptions
+        const createdPrescriptions = prescriptions.map((p) => ({
+          medicalRecord: medicalRecord._id,
+          medicationName: p.medicationName,
+          dosage: p.dosage,
+          frequency: p.frequency,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          specialInstructions: p.specialInstructions,
+        }));
+
+        updatedPrescriptions = await Prescription.insertMany(
+          createdPrescriptions
+        );
+      }
+
+      res.status(200).json({
+        message: "Medical record updated successfully",
+        medicalRecord,
+        prescriptions: updatedPrescriptions,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
   };
 

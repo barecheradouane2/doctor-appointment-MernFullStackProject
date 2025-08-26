@@ -33,6 +33,11 @@ const availableSlotRoutes = require('./routes/availableSlotRoutes');
 app.use('/available-slots',  availableSlotRoutes);
 const appointmentRoutes = require('./routes/appointmentRoutes');
 app.use('/appointments', appointmentRoutes);
+const doctorRoutes = require('./routes/doctorsRoutes');
+app.use('/doctors', doctorRoutes);
+
+
+
 
 // Start server
 app.listen(PORT, () => {
